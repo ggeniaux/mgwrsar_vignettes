@@ -1,0 +1,407 @@
+---
+title: "Estimating GWR and Mixed GWR Models with mgwrsar package: An Introduction with House Price Data"
+author: "Ghislain Geniaux"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float:
+      collapsed: false
+      smooth_scroll: false
+    toc_depth: 2
+vignette: >
+  %\VignetteIndexEntry{Estimating GWR and Mixed GWR Models with mgwrsar package: An Introduction with House Price Data}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8} 
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+library(ggplot2)
+rmse<-function(err) sqrt(mean(err^2))
+
+```
+
+# Introduction
+
+mgwrsar package estimates linear and local linear models with or without spatial autocorrelation and multiscale GWR. However this vignette is mainly dedicated to canonical GWR and mixed GWR without spatial autocorrelation (see other vignettes for models with spatial autocorrelation or with Top Down Scale approach for multiscale GWR):
+
+
+ $y=\beta_v(u_i,v_i) X_v+\,\epsilon_i\;\;\;\;\;\;\;\; (GWR)$
+ 
+$y=\beta_c X_c+\beta_v(u_i,v_i) X_v+\,\epsilon_i\;\;\;\;\;\;\;\;  (Mixed-GWR)$
+<!--
+ $$ y=\lambda Wy+\beta_c X_c+\,\epsilon_i\;\;\;\;\;\;\;\;  (MGWR-SAR(0,k,0))$$
+
+ $$ y=\lambda Wy+\beta_v(u_i,v_i)X_v+\,\epsilon_i\;\;\;\;\;\;\;\;  (MGWR-SAR(0,0,k))$$
+
+ $$ y=\lambda Wy+\beta_c X_c+\beta_v(u_i,v_i)X_v+\,\epsilon_i\;\;\;\;\;\;\;\;  (MGWR-SAR(0,k_c,k_v))$$
+
+ $$ y=\lambda(u_i,v_i) Wy+\beta_c X_c+\,\epsilon_i\;\;\;\;\;\;\;\;  (MGWR-SAR(1,k,0))$$
+
+ $$y=\lambda(u_i,v_i)Wy+\beta_v(u_i,v_i)X_v+\,\epsilon_i\;\;\;\;\;\;\;\;  (MGWR-SAR(1,0,k))$$
+
+ $$y=\lambda(u_i,v_i)Wy+\beta_cX_c+\beta_v(u_i,v_i)X_v+\,\epsilon_i\;\;\;\;\;\;\;\;  (MGWR-SAR(1,k_c,k_v))$$
+-->
+
+<!-- For a deeper understanding of the estimation method, please refer to Geniaux, G. and Martinetti, D. (2017). A new method for dealing simultaneously with spatial autocorrelation and spatial heterogeneity in regression models. Regional Science and Urban Economics. (https://doi.org/10.1016/j.regsciurbeco.2017.04.001) -->
+
+
+<!-- The estimation of the aforementioned model can be performed using the MGWRSAR wrapper function, which necessitates a dataframe and a matrix of coordinates, or "SpatialPointsDataFrame", "SpatialGridDataFrame","SpatialPixelsDataFrame","sf" dataframe. </br> It's important to note: -->
+
+<!-- * Optimal bandwidth estimation can be achieved using the golden_search_bandwidth function, considering either AICc or Leave-One-Out Cross Validation, applicable to all models, whether they involve spatial autocorrelation or not. -->
+<!-- * Gaussian (gauss), Epanechnikov (epane), bisquare (bisq), trisquare (trisq), triangle (triangle), rectangle (rectangle) can be used as kernel using only only space coordinates (Type='GD') or space-time coordinates (Type='GDT'). Adapative (where the bandwidth is a number of neighbors) or non adaptive (where the bandwidth is a distance) kernel can be used. -->
+<!-- * There are three modes of predictions available for spatially varying coefficients models (refer to Geniaux, 2024, "Speeding up estimation of spatially varying coefficients models," forthcoming in the Journal of Geographical Systems). -->
+<!-- * Predictions for models incorporating spatial autocorrelation can be conducted using the Best Linear Unbiased Prediction method proposed by Goulard et al. (2017). See vignette 'GWR-and-Mixed-GWR-with-spatial-autocorrelation' -->
+<!-- * model specifications and spatial stationarity of coefficients can be tested using bootstrap method. -->
+<!-- * mgwrsar allow allow to estimate temporal GWR/Mixed-GWR like model, using a type of kernel 'GDT'. It accommodates the consideration of space-time kernels (including asymmetric time kernels and asymmetric time cycling kernels) with appropriate diagnostics (such as AICc) for determining optimal bandwidths. See vignette 'GWR/Mixed-GWR-with-space-time-kernel'. -->
+<!-- * For large sample size, it employs RCCP and RCCPeigen code to expedite computations and facilitates parallel computing using the doParallel package. All mgwrsar model can be estimated using Target Points set and offers a method for selecting an optimal set of target points (based on a specified size) to enhance computational efficiency. See vignette 'Speeding_up_GWR_like_models' -->
+
+
+# Estimation and Model Specifications
+
+For a comprehensive understanding of the estimation method with spatial autocorrelation, please refer to:  
+**Geniaux, G. and Martinetti, D. (2018).** *A new method for dealing simultaneously with spatial autocorrelation and spatial heterogeneity in regression models.* Regional Science and Urban Economics.  
+[DOI: 10.1016/j.regsciurbeco.2017.04.001](https://doi.org/10.1016/j.regsciurbeco.2017.04.001)
+
+#### MGWRSAR Wrapper Function
+
+The estimation of the aforementioned model can be performed using the **MGWRSAR wrapper function**, which requires:  
+- A dataframe and a matrix of coordinates, or  
+- Objects such as `SpatialPointsDataFrame`, `SpatialGridDataFrame`, `SpatialPixelsDataFrame`, or an `sf` dataframe.
+
+### Key Features and Notes
+
+1. **Optimal Bandwidth Estimation**:  
+   - The `golden_search_bandwidth` function can be used to estimate optimal bandwidths, considering either **AICc** or **Leave-One-Out Cross Validation (LOOCV)**.  
+   - This applies to all models, including those with or without spatial autocorrelation.
+
+2. **Kernel Options**:  
+   - Available kernels include Gaussian (`gauss`), Epanechnikov (`epane`), Bisquare (`bisq`), Trisquare (`trisq`), Triangle (`triangle`), and Rectangle (`rectangle`).  
+   - Kernels can be applied to **space coordinates only** (`Type='GD'`) or **space-time coordinates** (`Type='GDT'`).  
+   - Both **adaptive** (bandwidth as a number of neighbors) and **non-adaptive** (bandwidth as a distance) kernels are supported.
+
+3. **Prediction Modes**:  
+   - Three prediction modes are available for spatially varying coefficients models.  
+   - Refer to **Geniaux (2024)**, *"Speeding up estimation of spatially varying coefficients models"* Journal of Geographycal Systems. 
+
+4. **Spatial Autocorrelation Predictions**:  
+   - Predictions for models incorporating spatial autocorrelation can be conducted using the **Best Linear Unbiased Prediction (BLUP)** method proposed by **Goulard et al. (2017)**.  
+   - For details, see the vignette: *GWR-and-Mixed-GWR-with-spatial-autocorrelation*.
+
+5. **Model Testing**:  
+   - Model specifications and spatial stationarity of coefficients can be tested using **bootstrap methods**.
+
+6. **Temporal GWR/Mixed-GWR Models**:  
+   - The `mgwrsar` package supports the estimation of **temporal GWR/Mixed-GWR** models using the `Type='GDT'` kernel.  
+   - It accommodates **space-time kernels**, including asymmetric time kernels and asymmetric time cycling kernels, with diagnostics (e.g., AICc) for determining optimal bandwidths.  
+   - For more details, refer to the vignette: *GWR/Mixed-GWR-with-space-time-kernel*.
+
+7. **Large Sample Size Optimization**:  
+   - For large datasets, the package employs **RCCP**, **RCCPArmadillo** and **RCCPeigen** code to accelerate computations.  
+   - It also supports **parallel computing** using the `doParallel` and `future` package.  
+   - All `mgwrsar` models can be estimated using a **Target Points set**, with a method for selecting an optimal set of target points (based on a specified size) to enhance computational efficiency.  
+   - For more information, see the vignette: *Speeding_up_GWR_like_models*.
+   
+<!-- ## Using mgwrsar package -->
+
+<!-- The MGWRSAR function requires a dataframe and a matrix of coordinates or a sf dataframe with coordinates. Here, we use the "mydatasf" example, which contains real estate data (single houses with land plots) from the south of France, including the price and four covariates: -->
+
+<!-- - price : price in euros -->
+<!-- - year: year of sale -->
+<!-- -	footage: total living area of the house -->
+<!-- -	land_area: area of the land plot -->
+<!-- -	pbb45: percentage of houses built before 1945 within a one-square-kilometer area (INSEE km grid, RGP 2010-2020) -->
+
+
+# Using the `mgwrsar` Package
+
+The **MGWRSAR function** requires either:  
+
+- A dataframe and a matrix of coordinates, or  
+- An `sf` dataframe with embedded coordinates.  
+
+For this example, we use the `mydatasf` dataset, which contains **real estate data** (single houses with land plots) from the south of France. The dataset includes the **price** and **four covariates**:
+
+- **price**: Price in euros.  
+- **year**: Year of sale.  
+- **footage**: Total living area of the house.  
+- **land_area**: Area of the land plot.  
+- **pbb45**: Percentage of houses built before 1945 within a one-square-kilometer area (INSEE km grid, RGP 2010-2020).
+
+<!-- The package includes a simulated data example used in this vignette. The simulated DGPs (GWR or mixed-GWR) are constructed using the spatial patterns of coefficients (Beta0, Beta1, Beta2, Beta3) and random normal white noise. GWR is expected to provide accurate estimates of these spatial patterns (Beta0, Beta1, Beta2, Beta3). -->
+
+## Data example
+```{r load_data, fig.width=10, fig.height=7, dpi=300, out.width="100%"}
+library(mgwrsar)
+library(sf)
+## loading data example
+data(mydatasf)
+
+p<-plot(mydatasf['price'],pch=19,cex=0.6)
+
+mydata<-st_drop_geometry(mydatasf)
+coords<-as.matrix(st_coordinates(mydatasf))
+mycrs=st_crs(mydatasf)
+
+```
+
+## Bandwidth optimization and Estimation for GWR
+
+Estimating a canonical GWR or Mixed-GWR model requires selecting an optimal bandwidth for the chosen kernel. The mgwrsar package provides a wrapper that simplifies the process of identifying the optimal bandwidth across various model and kernel types, using either AICc or cross-validation (CV) criteria. While primarily designed for spatial kernels (Type=‘GD’), it can also be applied to space-time kernels (Type=‘GDT’) by specifying a fixed bandwidth for the temporal dimension.
+
+The following example demonstrates how to search for the optimal bandwidth for GWR and MGWR (with a stationary intercept) models, using both AICc and CV criteria for adaptive and non-adaptive Gaussian kernels.
+
+### Bandwidth optimization and model estimation
+```{r GWR1 , eval=T}
+
+#### 
+res_AIC_non_adpative=golden_search_bandwidth(formula='price~year+footage+land_area',data = mydata,coords=coords, fixed_vars=NULL,kernels=c('bisq'), Model = 'GWR',control=list(adaptive=F,criterion='AICc',verbose=F),lower.bound=100, upper.bound=50000,tolerance=0.001,show_progress = FALSE)
+res_AIC_non_adpative$minimum 
+res_AIC_non_adpative$ctime 
+
+model_GWR1<-MGWRSAR(formula='price~year+footage+land_area',H=res_AIC_non_adpative$minimum,data = mydata,coords=coords, fixed_vars=NULL,kernels=c('bisq'),Model='GWR',control=list(adaptive=F,verbose=F,SE=T))
+model_GWR1@ctime 
+summary(model_GWR1)
+
+res_AIC_adpative=golden_search_bandwidth(formula='price~year+footage+land_area',data = mydata,coords=coords, fixed_vars=NULL,kernels=c('gauss'), Model = 'GWR',control=list(adaptive=T,criterion='AICc',verbose=F,NN=500),lower.bound=5, upper.bound=500,tolerance=0.001,show_progress = FALSE)
+res_AIC_adpative$minimum 
+res_AIC_adpative$ctime 
+
+model_GWR1<-res_AIC_adpative$model
+summary(res_AIC_adpative$model)
+
+
+```
+
+
+
+
+
+
+### Bandwidth optimization with a non adpative gaussian kernel using CV
+
+```{r CV , eval=T}
+## optimal bandwidth using CV criteria
+# optimization
+
+resGWR_CV_non_adpative=golden_search_bandwidth(formula='price~year+footage+land_area',data = mydata,coords=coords, fixed_vars=NULL,kernels=c('gauss'), Model = 'GWR',control=list(adaptive=F,criterion='CV',verbose=F,NN=500),lower.bound=5, upper.bound=50000,tolerance=0.001,show_progress = FALSE)
+resGWR_CV_non_adpative$minimum 
+resGWR_CV_non_adpative$ctime
+model_GWR1<-resGWR_CV_non_adpative$model
+```
+
+
+### Summary and plot sing leaflet of GWR likes models
+
+```{r plot optimal model , eval=T, out.width="100%"}
+# summary of optimal model
+summary(model_GWR1)
+
+p<-plot(model_GWR1,type='B_coef',var='Intercept')
+# Size Optimisation for the vignette
+p<-plotly::partial_bundle(p)
+p
+p<-plot(model_GWR1,type='B_coef',var='footage')
+# Size Optimisation for the vignette
+p<-plotly::partial_bundle(p)
+p
+
+```
+
+### Estimation of the GWR model with Standard Error Computation
+
+```{r SE , eval=T}
+## if we want the computation of Standard Error of coefficients, we can restimate the model using  (SE=T) in control.
+
+model_GWR1<-MGWRSAR(formula = 'price~year+footage+land_area', data = mydata,coords=coords, fixed_vars=NULL,kernels=c('gauss'),H=200, Model = 'GWR',control=list(adaptive=T,criterion='CV',verbose=F,NN=500,SE=T))
+
+summary(model_GWR1) 
+```
+
+### Plot of the effects of spatially varying coefficients:
+
+```{r plot2 , eval=T, dpi=300, out.width="100%"}
+# the effect of variable i for point (u_i,v_i) corresponds to x_i(u_i,v_i) * \beta_i(u_i,v_i)
+plot_effect(model_GWR1,title='Effects')
+
+
+```
+
+
+## Bandwidth optimization and Estimation of a mixed GWR model  (year AS FIXED VARS) with an adpative bisquare kernel.
+
+
+```{r MGWR1, eval=T }
+## optimal bandwidth using AICc criteria
+resMGWR_CV_adpative=golden_search_bandwidth(formula='price~year+footage+land_area',Ht=NULL,data = mydata,coords=coords, fixed_vars='year',kernels=c('gauss'), Model = 'MGWR',control=list(verbose=F,NN=500,criterion='CV',adaptive=T),lower.bound=6, upper.bound=502,tolerance=0.001,show_progress = FALSE)
+resMGWR_CV_adpative$minimum # 8
+model_MGWR<-resMGWR_CV_adpative$model
+## summary of optimal model
+summary(model_MGWR) 
+
+```
+
+
+
+## Bootstrap tests
+
+The *mgwrsar_bootstrap_test* function performs a bootstrap test for Beta coefficients in mgwrsar class models, with support for parallel computation. As this process can be time-consuming, it is not executed in this example.
+
+```{r Bootstrap_test, eval=F}
+D=as.matrix(dist(coords))
+
+#  Stationnarity Test should be conducted using optimal bandwidth
+
+resGWR=golden_search_bandwidth(formula='price~year+footage+land_area',data = mydata,coords=coords, fixed_vars=NULL,kernels=c('gauss'), Model = 'GWR',control=list(adaptive=T,criterion='CV',verbose=F,NN=500),lower.bound=5, upper.bound=502,tolerance=0.001,show_progress = FALSE)
+model_GWR<-resGWR$model
+
+resMGWR=golden_search_bandwidth(formula='price~year+footage+land_area',data = mydata,coords=coords, fixed_vars='year',kernels=c('gauss'), Model = 'MGWR',control=list(adaptive=T,criterion='CV',verbose=F,NN=500),lower.bound=5, upper.bound=502,tolerance=0.001,show_progress = FALSE)
+model_MGWR<-resMGWR$model
+
+model_GWR@AICc
+model_MGWR@AICc
+model_GWR@RMSE
+model_MGWR@RMSE
+
+test<-mgwrsar_bootstrap_test(model_MGWR,model_GWR,B=30,type='spatial',eps='H1',df='H1',focal='median',D=D)
+test
+#$p_star   --> we can not reject HO --> year is not varying over space
+
+# Significance Test of covariate "year"
+resGWRc=golden_search_bandwidth(formula='price~footage+land_area',data = mydata,coords=coords, fixed_vars=NULL,kernels=c('gauss'), Model = 'GWR',control=list(adaptive=T,criterion='CV',verbose=F,NN=500),lower.bound=5, upper.bound=502,tolerance=0.001,show_progress = FALSE)
+model_GWRc<-resGWRc$model
+
+model_GWRc@AICc
+model_GWR@AICc
+model_GWRc@RMSE 
+model_GWR@RMSE
+
+test<-mgwrsar_bootstrap_test(model_GWRc,model_GWR,B=30,doMC=F,ncore=1,type='spatial',eps='H1',df='H1',focal='median',D=D)
+test
+#$p_star --> we can reject HO --> "year" is significant
+
+# Significance Test of covariate "random"
+set.seed=1234
+mydata$random=rnorm(nrow(coords))
+
+resGWRnc=golden_search_bandwidth(formula='price~year+footage+land_area+random',data = mydata,coords=coords, fixed_vars=NULL,kernels=c('gauss'), Model = 'GWR',control=list(adaptive=T,criterion='CV',verbose=F,NN=500),lower.bound=5, upper.bound=502,tolerance=0.001,show_progress = FALSE)
+model_GWRnc<-resGWRnc$model
+
+model_GWRnc@AICc
+model_GWR@AICc
+model_GWRnc@RMSE
+model_GWR@RMSE
+
+test<-mgwrsar_bootstrap_test(model_GWR,model_GWRnc,B=30,type='spatial',eps='H1',df='H1',focal='median',D=D)
+test
+#$p_star  --> we can not reject HO --> "random" is not significant
+```    
+
+
+## Prediction
+
+
+In this example, we use an in-sample of 800 observations for model estimation and an out-sample of 200 observations for prediction. Predictions for GWR and MGWR can be made either by extrapolation (faster) or by re-estimating the model using out-sample locations as focal points (more accurate).
+
+
+For GWR and Mixed-GWR models, the most accurate approach for out-of-sample prediction is to re-estimate the model coefficients using out-sample locations as focal points. In this case, the estimated coefficients themselves are not used; only the model call and input data are employed. Alternatively, coefficients can be extrapolated using a weighting matrix, which is the only available method for models incorporating spatial autocorrelation (e.g., MGWR_1_0_kv, MGXWR_0_0_kv, MGXWR_1_kc_kv, MGXWR_1_kc_0) (see the vignette GWR-and-Mixed-GWR-with-spatial-autocorrelation.Rmd for details). Users can then also choose to extrapolate model coefficients using a Shepard kernel with a specified number of neighbors *(method_pred=‘shepard’, k_extra=12)*, apply the same kernel and bandwidth as the estimated model *(method_pred=‘model’)*, or use the method proposed by Geniaux (2024) *(method_pred=‘tWtp_model’)*, which is the default when re-estimating model coefficients using out-sample locations as focal points is not possible.
+
+
+
+```{r Prediction1, eval=T}
+set.seed(123, kind = "L'Ecuyer-CMRG", normal.kind = "Inversion")
+# build insample and outsample folds
+length_out=1200
+index_in=sample(1:nrow(mydata),length_out)
+index_out=(1:nrow(mydata))[-index_in]
+
+# estimate a GWR model on an insample fold
+
+res_AIC_non_adpative=golden_search_bandwidth(formula='price~year+footage+land_area',data = mydata[index_in,],coords=coords[index_in,], fixed_vars=NULL,kernels=c('gauss'), Model = 'GWR',control=list(adaptive=T,criterion='CV',verbose=F),lower.bound=5, upper.bound=length(index_in),tolerance=0.001,show_progress = FALSE)
+res_AIC_non_adpative$minimum
+
+model_GWR_insample1<-res_AIC_non_adpative$model
+
+# build outsample data
+  newdata=mydata[index_out,]
+  newdata_coords=coords[index_out,]
+  
+## prediction of the GWR model on the newdata  
+  
+## restimate the model coefficient using locations of out-sample as focal points 
+  Y_pred1=predict(model_GWR_insample1, newdata=newdata, newdata_coords=newdata_coords)
+  head(Y_pred1)
+  head(mydata$price[index_out])
+  sqrt(mean((mydata$price[index_out]-Y_pred1)^2)) 
+
+## Prediction with method_pred='tWtp' 
+Y_pred2=predict(model_GWR_insample1, newdata=newdata, newdata_coords=newdata_coords,method_pred='tWtp_model')
+head(Y_pred2)
+head(mydata$price[index_out])
+sqrt(mean((mydata$price[index_out]-Y_pred2)^2)) 
+
+## Prediction with method_pred='model' 
+Y_pred3=predict(model_GWR_insample1, newdata=newdata, newdata_coords=newdata_coords,method_pred='model')
+head(Y_pred3)
+head(mydata$price[index_out])
+sqrt(mean((mydata$price[index_out]-Y_pred3)^2)) 
+
+
+## Prediction with method_pred='shepard' 
+Y_pred4=predict(model_GWR_insample1, newdata=newdata, newdata_coords=newdata_coords,method_pred='shepard')
+head(Y_pred4)
+head(mydata$price[index_out])
+sqrt(mean((mydata$price[index_out]-Y_pred4)^2)) 
+
+
+### Model Mixed-GWR (wrong model...)
+
+resMGWR_CV_adpative=golden_search_bandwidth(formula='price~year+footage+land_area',data = mydata[index_in,],coords=coords[index_in,], fixed_vars='year',kernels=c('gauss'), Model = 'MGWR',control=list(adaptive=T,criterion='CV',verbose=F),lower.bound=5, upper.bound=length(index_in),tolerance=0.001,show_progress = FALSE)
+res_AIC_non_adpative$minimum
+
+model_MGWR_insample2<-resMGWR_CV_adpative$model
+
+
+## restimate the model coefficient using locations of out-sample as focal points 
+Y_pred5=predict(model_MGWR_insample2, newdata=newdata, newdata_coords=newdata_coords)
+head(Y_pred5)
+head(mydata$price[index_out])
+sqrt(mean((mydata$price[index_out]-Y_pred5)^2)) 
+
+## extrapolation of beta coefs with tWtp_model kernel
+Y_pred6=predict(model_MGWR_insample2, newdata=newdata, newdata_coords=newdata_coords,method_pred='tWtp_model')
+head(Y_pred6)
+head(mydata$price[index_out])
+sqrt(mean((mydata$price[index_out]-Y_pred6)^2)) 
+
+```
+
+# References
+
+
+Brunsdon, C., Fotheringham, A., Charlton, M., 1996. *Geographically weighted regression: a method for exploring spatial nonstationarity*. Geogr. Anal. 28 (4), 281–298.
+
+Friedman, J. H. 1984. *A variable span smoother*. Laboratory for Computational Statistics, Department of Statistics, Stanford University: Technical Report(5).
+
+Geniaux, G. and Martinetti, D. 2018.  *A new method for dealing simultaneously with spatial autocorrelation and spatial heterogeneity in regression models*. Regional Science and Urban Economics, 72, 74-85. https://doi.org/10.1016/j.regsciurbeco.2017.04.001
+
+Geniaux, G. and Martinetti, D. 2017b. R package mgwrsar: Functions for computing (mixed) geographycally weighted regression with spatial autocorrelation,. https://CRAN.R-project.org/package=mgwrsar.
+
+Geniaux, G. 2024. Speeding up estimation of spatially varying coefficients models.  Jounal of Geographical System 26, 293–327. https://doi.org/10.1007/s10109-024-00442-3
+
+Goulard, M., Laurent, T., & Thomas-Agnan, C., 2017, "About predictions in spatial autoregressive models: Optimal and almost optimal strategies," published in Spatial Economic Analysis, 12(2-3), 304-325
+
+Loader, C. 1999. *Local regression and likelihood*, volume 47. springer New York.
+
+McMillen, D. P. 1996. *One hundred fifty years of land values in chicago: A nonparametric approach*. Journal of Urban Economics, 40(1):100 – 124.
+
+
+
+
+
+ 
+ 
